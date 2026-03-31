@@ -1,10 +1,26 @@
 #!/bin/bash
 # Watch Responder — polls relay for questions from the watch,
 # answers them using Claude Code (your subscription, no API cost)
-# Usage: ./watch-responder.sh (runs in background, Ctrl+C to stop)
+#
+# Usage:
+#   watch-responder              # new conversation
+#   watch-responder --continue   # continue most recent conversation
+#   watch-responder --resume ID  # resume specific conversation
 
 RELAY_URL="${RELAY_URL:-https://claudewatch-relay.vercel.app}"
 RELAY_SECRET="${RELAY_SECRET:-840606e72d1ccdb07c930afc79225877}"
+
+# Conversation mode
+CLAUDE_MODE="--print"
+if [ "$1" = "--continue" ]; then
+  CLAUDE_MODE="--print --continue"
+  echo "🔗 Continuing most recent conversation"
+elif [ "$1" = "--resume" ] && [ -n "$2" ]; then
+  CLAUDE_MODE="--print --resume $2"
+  echo "🔗 Resuming conversation: $2"
+fi
+
+FIRST_MESSAGE=true
 
 echo "🤖 Watch Responder started"
 echo "   Polling $RELAY_URL for questions..."
@@ -24,7 +40,6 @@ while true; do
     QUESTION=$(echo "$PENDING" | python3 -c "
 import sys,json
 msgs = json.load(sys.stdin)['messages']
-# oldest pending
 m = msgs[-1]
 print(m['id'] + '|||' + m['question'])
 " 2>/dev/null)
@@ -35,22 +50,31 @@ print(m['id'] + '|||' + m['question'])
     if [ -n "$MSG_ID" ] && [ -n "$MSG_TEXT" ]; then
       echo "📱 Question from watch: $MSG_TEXT"
 
+      # After first message, always continue the conversation
+      if [ "$FIRST_MESSAGE" = true ]; then
+        FIRST_MESSAGE=false
+      else
+        # Continue the conversation chain after first message
+        if [[ "$CLAUDE_MODE" != *"--continue"* ]] && [[ "$CLAUDE_MODE" != *"--resume"* ]]; then
+          CLAUDE_MODE="--print --continue"
+        fi
+      fi
+
       # Use Claude Code to answer (uses your subscription!)
-      ANSWER=$(claude --print --dangerously-skip-permissions "Answer this briefly in under 40 words. Also provide exactly 3 short follow-up suggestions the user might ask next, as a JSON array called quickReplies. Format: {\"answer\": \"your answer\", \"quickReplies\": [\"q1\", \"q2\", \"q3\"]}. Question: $MSG_TEXT" 2>/dev/null)
+      ANSWER=$(claude $CLAUDE_MODE "Answer briefly in under 40 words. Provide 3 short follow-up suggestions as JSON quickReplies. Format: {\"answer\": \"your answer\", \"quickReplies\": [\"q1\", \"q2\", \"q3\"]}. Question: $MSG_TEXT" 2>/dev/null)
 
       if [ -n "$ANSWER" ]; then
         # Try to parse structured response
         PARSED_ANSWER=$(echo "$ANSWER" | python3 -c "
 import sys,json
 text = sys.stdin.read()
-# Try to find JSON in the response
 try:
     start = text.index('{')
     end = text.rindex('}') + 1
     d = json.loads(text[start:end])
     print(json.dumps({'answer': d.get('answer', text[:200]), 'quickReplies': d.get('quickReplies', [])}))
 except:
-    print(json.dumps({'answer': text[:200], 'quickReplies': []}))
+    print(json.dumps({'answer': text[:200].strip(), 'quickReplies': []}))
 " 2>/dev/null)
 
         ANSWER_TEXT=$(echo "$PARSED_ANSWER" | python3 -c "import sys,json; print(json.load(sys.stdin)['answer'])" 2>/dev/null)
