@@ -6,13 +6,23 @@ let approvals: Approval[] = [];
 
 interface Approval {
   id: string;
+  type: 'approval' | 'permission';
   title: string;
   body: string;
+  watchBody: string;
   sender: string;
+  tool?: string;
+  toolInput?: string;
   status: 'pending' | 'approved' | 'rejected';
   reply?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+function summarize(text: string, maxWords: number = 30): string {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return text;
+  return words.slice(0, maxWords).join(' ') + '...';
 }
 
 function auth(req: VercelRequest): boolean {
@@ -56,15 +66,20 @@ function handleGet(req: VercelRequest, res: VercelResponse) {
 }
 
 function handlePost(req: VercelRequest, res: VercelResponse) {
-  const { title, body, sender } = req.body;
+  const { title, body, sender, type, tool, toolInput } = req.body;
 
   if (!title) return res.status(400).json({ error: 'title is required' });
 
+  const fullBody = body || '';
   const approval: Approval = {
     id: crypto.randomUUID(),
+    type: type || 'approval',
     title,
-    body: body || '',
+    body: fullBody,
+    watchBody: summarize(fullBody),
     sender: sender || 'Claude Code',
+    tool: tool || undefined,
+    toolInput: toolInput || undefined,
     status: 'pending',
     createdAt: new Date().toISOString(),
   };

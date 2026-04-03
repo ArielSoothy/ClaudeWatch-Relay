@@ -8,10 +8,17 @@ interface ChatMessage {
   id: string;
   question: string;
   answer?: string;
+  watchSummary?: string;
   quickReplies?: string[];
   status: 'pending' | 'answered';
   createdAt: string;
   answeredAt?: string;
+}
+
+function summarize(text: string, maxWords: number = 50): string {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return text;
+  return words.slice(0, maxWords).join(' ') + '...';
 }
 
 function auth(req: VercelRequest): boolean {
@@ -79,7 +86,10 @@ function handlePatch(req: VercelRequest, res: VercelResponse) {
   if (index === -1) return res.status(404).json({ error: 'Not found' });
 
   const { answer, quickReplies } = req.body;
-  if (answer) messages[index].answer = answer;
+  if (answer) {
+    messages[index].answer = answer;
+    messages[index].watchSummary = summarize(answer);
+  }
   if (quickReplies) messages[index].quickReplies = quickReplies;
   messages[index].status = 'answered';
   messages[index].answeredAt = new Date().toISOString();
