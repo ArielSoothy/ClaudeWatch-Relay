@@ -4,7 +4,7 @@
 #        notify-watch.sh "Error" "Type check failed" "ClaudeWatch"
 
 RELAY_URL="${RELAY_URL:-https://claudewatch-relay-pynnfzcae-ariels-projects-62f6e5f2.vercel.app}"
-RELAY_SECRET="${RELAY_SECRET:-840606e72d1ccdb07c930afc79225877}"
+RELAY_SECRET="${RELAY_SECRET:?Set RELAY_SECRET env var}"
 
 TITLE="${1:-Task complete}"
 BODY="${2:-}"
